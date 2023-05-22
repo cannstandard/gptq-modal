@@ -10,18 +10,14 @@ from pathlib import Path
 from modal import Image, Stub, method, create_package_mounts
 import pandas as pd
 
-stub = Stub(name="manticore-newcuda")
+stub = Stub(name="manticore-nochat")
 MODEL_NAME = "TheBloke/Manticore-13B-GPTQ"
 
 def download_model():
     from huggingface_hub import snapshot_download
 
-    # Match what FastChat expects
-    # https://github.com/thisserand/FastChat/blob/4a57c928a906705404eae06f7a44b4da45828487/download-model.py#L203
-    output_folder = f"{'_'.join(MODEL_NAME.split('/')[-2:])}"
-
     snapshot_download(
-        local_dir=Path("/FastChat", "models", output_folder),
+        local_dir=Path("/FastChat", "models", MODEL_NAME.replace('/', '_')),
         repo_id=MODEL_NAME,
         allow_patterns="*"
     )
@@ -36,13 +32,8 @@ stub.vicuna_image = (
         ],
     )
     .run_commands(
-        "git clone https://github.com/thisserand/FastChat.git",
-        "cd FastChat && pip install -e .",
-    )
-    .run_commands(
-        # FastChat hard-codes a path for GPTQ, so this needs to be cloned inside repositories.
         "git clone https://github.com/oobabooga/GPTQ-for-LLaMa.git -b cuda /FastChat/repositories/GPTQ-for-LLaMa",
-        "cd /FastChat/repositories/GPTQ-for-LLaMa && python setup_cuda.py install",
+        "cd /FastChat/repositories/GPTQ-for-LLaMa && pip install -r requirements.txt && python setup_cuda.py install",
         gpu="any",
     )
     .run_function(download_model)
@@ -50,16 +41,10 @@ stub.vicuna_image = (
 
 if stub.is_inside(stub.vicuna_image):
     t0 = time.time()
-    import os
     import warnings
-
-    warnings.filterwarnings(
-        "ignore", category=UserWarning, message="TypedStorage is deprecated"
-    )
-
-    # This version of FastChat hard-codes a relative path for the model ("./model"),
-    # making this necessary :(
-    os.chdir("/FastChat")
+    warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
+    import sys
+    sys.path.insert(0, str(Path("/FastChat/repositories/GPTQ-for-LLaMa")))
     import gptq_wrapper
 
 @stub.cls(image=stub.vicuna_image, gpu="A10G", container_idle_timeout=300, mounts=create_package_mounts(["gptq_wrapper"]))
@@ -112,7 +97,6 @@ class Vicuna:
         messages.append((self.ai, None))
 
         prompt = self.prompt(messages)
-        print("P:", prompt)
 
         params = {
             "model": MODEL_NAME,
@@ -122,19 +106,19 @@ class Vicuna:
             "stop": self.sep,
         }
 
-        prev = len(prompt) + 2
+        print(prompt)
+
+        prev = len(prompt) + 1
         count = 0
         for outputs in gptq_wrapper.generate_stream(self.tokenizer, self.model, params, "cuda"):
-            yield outputs[prev:].replace("##", "")
+            yield outputs[prev:]
             prev = len(outputs)
             count = count + 2 # stream_interval
         dur = time.time() - t0
 
-        print("")
-        print(f"{count} tokens generated in {dur:.2f}s, {1000*dur/count:.2f} ms/token")
+        print(f"{count} tokens generated in {dur:.2f}s, {1000*dur/count:.2f} ms/token", file=sys.stderr)
 
-
-# For local testing, run `modal run -q src.llm_vicuna --input "Where is the best sushi in New York?"`
+# For local testing, run `modal run -q gptq.py --input "Where is the best sushi in New York?"`
 @stub.local_entrypoint()
 def main(input: str):
     model = Vicuna()

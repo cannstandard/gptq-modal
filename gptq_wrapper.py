@@ -1,15 +1,13 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM    
 import sys
 from pathlib import Path
 import torch
 import transformers
-from transformers import AutoConfig, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 
-sys.path.insert(0, str(Path("repositories/GPTQ-for-LLaMa")))
 from modelutils import find_layers
 from quant import make_quant
 
+# https://github.com/thisserand/FastChat/blob/main/fastchat/serve/load_gptq_model.py
 def load_quant(model, checkpoint, wbits, groupsize=-1, faster_kernel=False, exclude_layers=['lm_head'], kernel_switch_threshold=128):
     config = AutoConfig.from_pretrained(model)
     def noop(*args, **kwargs):
@@ -43,10 +41,10 @@ def load_quant(model, checkpoint, wbits, groupsize=-1, faster_kernel=False, excl
 
     return model
 
-
+# https://github.com/thisserand/FastChat/blob/main/fastchat/serve/load_gptq_model.py
 def load_quantized(model_name, wbits=4, groupsize=128, threshold=128):
     model_name = model_name.replace('/', '_')
-    path_to_model = Path(f'./models/{model_name}')
+    path_to_model = Path(f'/FastChat/models/{model_name}')
     found_pts = list(path_to_model.glob("*.pt"))
     found_safetensors = list(path_to_model.glob("*.safetensors"))
     pt_path = None
@@ -64,6 +62,7 @@ def load_quantized(model_name, wbits=4, groupsize=128, threshold=128):
 
     return model
 
+# https://github.com/thisserand/FastChat/blob/main/fastchat/serve/cli.py
 @torch.inference_mode()
 def generate_stream(tokenizer, model, params, device,
                     context_len=2048, stream_interval=2):
