@@ -10,7 +10,7 @@ from pathlib import Path
 from modal import Image, Stub, method, create_package_mounts
 import pandas as pd
 
-stub = Stub(name="manticore")
+stub = Stub(name="manticore-newcuda")
 MODEL_NAME = "TheBloke/Manticore-13B-GPTQ"
 
 def download_model():
@@ -29,13 +29,12 @@ def download_model():
 
 stub.vicuna_image = (
     Image.from_dockerhub(
-        "nvidia/cuda:11.7.0-devel-ubuntu20.04",
+        "nvidia/cuda:11.7.1-devel-ubuntu22.04",
         setup_dockerfile_commands=[
             "RUN apt-get update",
-            "RUN apt-get install -y python3 python3-pip python-is-python3",
+            "RUN apt-get install -y python3 python3-pip python-is-python3 git build-essential",
         ],
     )
-    .apt_install("git", "gcc", "build-essential")
     .run_commands(
         "git clone https://github.com/thisserand/FastChat.git",
         "cd FastChat && pip install -e .",
@@ -131,6 +130,7 @@ class Vicuna:
             count = count + 2 # stream_interval
         dur = time.time() - t0
 
+        print("")
         print(f"{count} tokens generated in {dur:.2f}s, {1000*dur/count:.2f} ms/token")
 
 
