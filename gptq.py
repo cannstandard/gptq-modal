@@ -102,6 +102,7 @@ class Vicuna:
             "model": MODEL_NAME,
             "prompt": prompt,
             "temperature": temperature,
+            "repetition_penalty": 1.1,
             "max_new_tokens": 512,
             "stop": self.sep,
         }

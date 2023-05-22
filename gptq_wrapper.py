@@ -3,6 +3,13 @@ from pathlib import Path
 import torch
 import transformers
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
+from transformers.generation.logits_process import (
+    LogitsProcessorList,
+    RepetitionPenaltyLogitsProcessor,
+    TemperatureLogitsWarper,
+    TopKLogitsWarper,
+    TopPLogitsWarper,
+)
 
 from modelutils import find_layers
 from quant import make_quant
@@ -62,7 +69,24 @@ def load_quantized(model_name, wbits=4, groupsize=128, threshold=128):
 
     return model
 
+#https://github.com/lm-sys/FastChat/blob/main/fastchat/serve/inference.py
+def prepare_logits_processor(
+    temperature: float, repetition_penalty: float, top_p: float, top_k: int
+) -> LogitsProcessorList:   
+    processor_list = LogitsProcessorList()
+    # TemperatureLogitsWarper doesn't accept 0.0, 1.0 makes it a no-op so we skip two cases.
+    if temperature >= 1e-5 and temperature != 1.0:
+        processor_list.append(TemperatureLogitsWarper(temperature))
+    if repetition_penalty > 1.0:
+        processor_list.append(RepetitionPenaltyLogitsProcessor(repetition_penalty))
+    if 1e-8 <= top_p < 1.0:
+        processor_list.append(TopPLogitsWarper(top_p))
+    if top_k > 0:
+        processor_list.append(TopKLogitsWarper(top_k))
+    return processor_list
+
 # https://github.com/thisserand/FastChat/blob/main/fastchat/serve/cli.py
+# partially merged with https://github.com/lm-sys/FastChat/blob/main/fastchat/serve/inference.py
 @torch.inference_mode()
 def generate_stream(tokenizer, model, params, device,
                     context_len=2048, stream_interval=2):
@@ -70,7 +94,14 @@ def generate_stream(tokenizer, model, params, device,
 
     prompt = params["prompt"]
     l_prompt = len(prompt)
+    
     temperature = float(params.get("temperature", 1.0))
+    repetition_penalty = float(params.get("repetition_penalty", 1.0))
+    top_p = float(params.get("top_p", 1.0))
+    top_k = int(params.get("top_k", -1))  # -1 means disable
+
+    logits_processor = prepare_logits_processor(temperature, repetition_penalty, top_p, top_k)
+
     max_new_tokens = int(params.get("max_new_tokens", 256))
     stop_str = params.get("stop", None)
 
@@ -96,11 +127,16 @@ def generate_stream(tokenizer, model, params, device,
             logits = out.logits
             past_key_values = out.past_key_values
 
-        last_token_logits = logits[0][-1]
-        if temperature < 1e-4:
+        if repetition_penalty > 1.0:
+            tmp_output_ids = torch.as_tensor([output_ids], device=logits.device)
+        else:
+            tmp_output_ids = None
+        last_token_logits = logits_processor(tmp_output_ids, logits[:, -1, :])[0]
+
+        if temperature < 1e-5 or top_p < 1e-8:  # greedy
             token = int(torch.argmax(last_token_logits))
         else:
-            probs = torch.softmax(last_token_logits / temperature, dim=-1)
+            probs = torch.softmax(last_token_logits, dim=-1)
             token = int(torch.multinomial(probs, num_samples=1))
 
         output_ids.append(token)
