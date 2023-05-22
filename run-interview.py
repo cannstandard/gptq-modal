@@ -1,21 +1,20 @@
-from gptq import Vicuna
+from gptq import ModalGPTQ, stub
 import pandas as pd
 
-# For local testing, run `modal run -q src.llm_vicuna --input "Where is the best sushi in New York?"`
+# For local testing, run `modal run -q run-interview.py --input questions.csv --temperature 0.7`
 @stub.local_entrypoint()
-def main(input: str):
-    model = Vicuna()
+def main(input: str, temperature: float):
+    model = ModalGPTQ()
     questions = pd.read_csv(input)
+    custom_precise = model.params(temperature=temperature, repetition_penalty=1.176, top_k=40, top_p=0.1)
 
     for idx, question in questions.iterrows():
-        for temp in [0.0, 0.7]:
-            print("Q["+str(idx)+"]", question['name'], question['language'], 'temp=', temp)
+            print("Q["+str(idx)+"]", question['name'])
 
-            manticore_input = "### Instruction: "+question['prompt']+"\n\n### Assistant: "
             answer = ""
-            for val in model.generate.call(manticore_input, temp):
+            for val in model.generate.call(question['prompt'], params=custom_precise):
                 answer += val
                 print(val, end="", flush=True)
 
-            with open(f'answer_{idx}_{temp}.txt', 'w') as f:
+            with open(f'answer_{idx}.txt', 'w') as f:
                 f.write(answer)
