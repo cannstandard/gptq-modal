@@ -1,9 +1,8 @@
 """
-Vicuna 13B language model, 4-bit quantized for faster inference.
-Adapted from https://github.com/thisserand/FastChat.git
+GPTQ wrapper for 13B language model, 4-bit quantized for faster inference.
+Adapted from https://github.com/thisserand/FastChat.git and https://github.com/lm-sys/FastChat.git
 
-Path to weights provided for illustration purposes only,
-please check the license before using for commercial purposes!
+Path to weights provided for illustration purposes only, please check the license before using for commercial purposes!
 """
 import time
 from pathlib import Path
