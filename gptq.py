@@ -22,7 +22,7 @@ def download_model():
     )
 
 
-stub.vicuna_image = (
+stub.gptq_image = (
     Image.from_dockerhub(
         "nvidia/cuda:11.7.1-devel-ubuntu22.04",
         setup_dockerfile_commands=[
@@ -38,7 +38,7 @@ stub.vicuna_image = (
     .run_function(download_model)
 )
 
-if stub.is_inside(stub.vicuna_image):
+if stub.is_inside(stub.gptq_image):
     t0 = time.time()
     import warnings
     warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
@@ -46,8 +46,8 @@ if stub.is_inside(stub.vicuna_image):
     sys.path.insert(0, str(Path("/FastChat/repositories/GPTQ-for-LLaMa")))
     import gptq_wrapper
 
-@stub.cls(image=stub.vicuna_image, gpu="A10G", container_idle_timeout=300, mounts=create_package_mounts(["gptq_wrapper"]))
-class Vicuna:
+@stub.cls(image=stub.gptq_image, gpu="A10G", container_idle_timeout=300, mounts=create_package_mounts(["gptq_wrapper"]))
+class ModalGPTQ:
     def __enter__(self):
         tokenizer = gptq_wrapper.AutoTokenizer.from_pretrained(MODEL_NAME)
 
@@ -71,6 +71,15 @@ class Vicuna:
         self.ai = ai
         self.sep = sep
 
+    def params(self, temperature=0.7, repetition_penalty=1.0, top_k=-1, top_p=1.0):
+        return {
+            "model": MODEL_NAME,
+            "temperature": temperature,
+            "repetition_penalty": repetition_penalty,
+            "top_k": top_k,
+            "top_p": top_p
+        }
+
     def prompt(self, messages):
         ret = self.system + self.sep
         for role, message in messages:
@@ -81,7 +90,7 @@ class Vicuna:
         return ret
 
     @method()
-    async def generate(self, input, temperature = 0.0, history=[]):
+    async def generate(self, input, max_new_tokens = 512, history=[], params=None):
         if input == "":
             return
 
@@ -96,17 +105,14 @@ class Vicuna:
         messages.append((self.ai, None))
 
         prompt = self.prompt(messages)
-
-        params = {
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "temperature": temperature,
-            "repetition_penalty": 1.1,
-            "max_new_tokens": 512,
-            "stop": self.sep,
-        }
-
         print(prompt)
+
+        if params is None:
+            params = self.params()
+        params['prompt'] = prompt
+        params['max_new_tokens'] = max_new_tokens
+        params['stop'] = self.sep
+        print(params)
 
         prev = len(prompt) + 1
         count = 0
@@ -121,7 +127,12 @@ class Vicuna:
 # For local testing, run `modal run -q gptq.py --input "Where is the best sushi in New York?"`
 @stub.local_entrypoint()
 def main(input: str):
-    model = Vicuna()
+    model = ModalGPTQ()
 
-    for val in model.generate.call(input):
+    # creative and precise settings from https://old.reddit.com/r/LocalLLaMA/wiki/index
+    default = model.params()
+    precise = model.params(temperature=0.7, repetition_penalty=1.176, top_k=40, top_p=0.1)
+    creative = model.params(temperature=0.72, repetition_penalty=1.1, top_k=0, top_p=0.73)
+
+    for val in model.generate.call(input, params=precise):
         print(val, end="", flush=True)
