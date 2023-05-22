@@ -6,11 +6,14 @@ Path to weights provided for illustration purposes only, please check the licens
 """
 import time
 from pathlib import Path
-from modal import Image, Stub, method, create_package_mounts
+from modal import Image, Stub, method, create_package_mounts, gpu
 import pandas as pd
 
 stub = Stub(name="manticore-nochat")
+
 MODEL_NAME = "TheBloke/Manticore-13B-GPTQ"
+MODEL_WBITS = 4
+MODEL_GROUPSIZE = 128 # -1 to disable
 
 def download_model():
     from huggingface_hub import snapshot_download
@@ -46,13 +49,13 @@ if stub.is_inside(stub.gptq_image):
     sys.path.insert(0, str(Path("/FastChat/repositories/GPTQ-for-LLaMa")))
     import gptq_wrapper
 
-@stub.cls(image=stub.gptq_image, gpu="A10G", container_idle_timeout=300, mounts=create_package_mounts(["gptq_wrapper"]))
+@stub.cls(image=stub.gptq_image, gpu=gpu.A10G(count=1), concurrency_limit=1, container_idle_timeout=300, mounts=create_package_mounts(["gptq_wrapper"]))
 class ModalGPTQ:
     def __enter__(self):
         tokenizer = gptq_wrapper.AutoTokenizer.from_pretrained(MODEL_NAME)
 
         print("Loading GPTQ quantized model...")
-        model = gptq_wrapper.load_quantized(MODEL_NAME)
+        model = gptq_wrapper.load_quantized(MODEL_NAME, wbits=MODEL_WBITS, groupsize=MODEL_GROUPSIZE)
         model.cuda()
 
         self.model = model
