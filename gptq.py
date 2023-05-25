@@ -7,13 +7,13 @@ Path to weights provided for illustration purposes only, please check the licens
 import time
 from pathlib import Path
 from modal import Image, Stub, method, create_package_mounts, gpu
-import pandas as pd
 
-stub = Stub(name="manticore-nochat")
-
-MODEL_NAME = "TheBloke/Manticore-13B-GPTQ"
+MODEL_NAME = "TheBloke/wizard-mega-13B-GPTQ"
+MODEL_FILES = ["*.safetensors", "*.json", "*.model"]
 MODEL_WBITS = 4
 MODEL_GROUPSIZE = 128 # -1 to disable
+
+stub = Stub(name="modalgptq-"+MODEL_NAME.replace('/', '-'))
 
 def download_model():
     from huggingface_hub import snapshot_download
@@ -21,7 +21,7 @@ def download_model():
     snapshot_download(
         local_dir=Path("/FastChat", "models", MODEL_NAME.replace('/', '_')),
         repo_id=MODEL_NAME,
-        allow_patterns="*"
+        allow_patterns=MODEL_FILES
     )
 
 
@@ -84,12 +84,12 @@ class ModalGPTQ:
         }
 
     def prompt(self, messages):
-        ret = self.system + self.sep
+        ret = self.system
         for role, message in messages:
             if message:
-                ret += role + ": " + message + self.sep
+                ret += self.sep + ' ' + role + ": " + message 
             else:
-                ret += role + ":"
+                ret += self.sep + ' ' + role + ":"
         return ret
 
     @method()

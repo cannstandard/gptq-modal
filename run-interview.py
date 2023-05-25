@@ -1,5 +1,6 @@
 from gptq import ModalGPTQ, stub
 import pandas as pd
+from time import time
 
 # For local testing, run `modal run -q run-interview.py --input questions.csv --temperature 0.7`
 @stub.local_entrypoint()
@@ -16,5 +17,5 @@ def main(input: str, temperature: float):
                 answer += val
                 print(val, end="", flush=True)
 
-            with open(f'answer_{idx}.txt', 'w') as f:
+            with open(question['name']+'.txt', 'w') as f:
                 f.write(answer)
