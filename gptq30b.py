@@ -1,5 +1,5 @@
 """
-GPTQ wrapper for 30B language model, 4-bit quantized for faster inference.
+GPTQ wrapper for 13B language model, 4-bit quantized for faster inference.
 Adapted from https://github.com/thisserand/FastChat.git and https://github.com/lm-sys/FastChat.git
 
 Path to weights provided for illustration purposes only, please check the license before using for commercial purposes!
@@ -9,19 +9,27 @@ from pathlib import Path
 from modal import Image, Stub, method, create_package_mounts, gpu
 
 MODEL_NAME = "TheBloke/VicUnlocked-30B-LoRA-GPTQ"
+MODEL_FILES = ["*"]
 MODEL_WBITS = 4
-MODEL_GROUPSIZE = -1
+MODEL_GROUPSIZE = -1 # -1 to disable
 
-stub = Stub(name="modalgptq-"+MODEL_NAME.replace('/', '-'))
+stub = Stub(name=MODEL_NAME.replace('/', '-'))
 
-def download_30b_model():
+#### NOTE: Modal will not rebuild the container unless this function name or it's code contents change.
+####       It is NOT sufficient to change any of the constants above.
+def download_VicUnlocked_model():
     from huggingface_hub import snapshot_download
+
+    # Match what FastChat expects
+    # https://github.com/thisserand/FastChat/blob/4a57c928a906705404eae06f7a44b4da45828487/download-model.py#L203
+    output_folder = f"{'_'.join(MODEL_NAME.split('/')[-2:])}"
 
     snapshot_download(
         local_dir=Path("/FastChat", "models", MODEL_NAME.replace('/', '_')),
-        repo_id="TheBloke/VicUnlocked-30B-LoRA-GPTQ",
-        allow_patterns=["*.safetensors", "*.json", "*.model"]
+        repo_id=MODEL_NAME,
+        allow_patterns=MODEL_FILES
     )
+
 
 
 stub.gptq_image = (
@@ -37,7 +45,7 @@ stub.gptq_image = (
         "cd /FastChat/repositories/GPTQ-for-LLaMa && pip install -r requirements.txt && python setup_cuda.py install",
         gpu="any",
     )
-    .run_function(download_30b_model)
+    .run_function(download_VicUnlocked_model)
 )
 
 if stub.is_inside(stub.gptq_image):
