@@ -70,7 +70,7 @@ class ModalFalconGPTQ:
         prompt_template = f"### Instruction: {prompt}\n### Response:"
 
         tokens = self.tokenizer(prompt_template, return_tensors="pt").to("cuda:0").input_ids
-        output = self.model.generate(input_ids=tokens, max_new_tokens=100, do_sample=True, temperature=0.8)
+        output = self.model.generate(input_ids=tokens, max_new_tokens=512, do_sample=True, eos_token_id=11, temperature=0.8)
         return self.tokenizer.decode(output[0])
 
 # For local testing, run `modal run -q gptq.py --input "Where is the best sushi in New York?"`
